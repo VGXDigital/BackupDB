@@ -4,6 +4,71 @@ A comprehensive database backup script with multi-storage backend support, autom
 
 ---
 
+## Version 7.0 (February 16, 2026) - Robust Error Handling & Security Hardening
+
+### Major Rewrite: Error Handling Framework
+The script's core error handling has been completely rewritten. The previous approach (`set -euo pipefail`) caused silent crashes when commands like `grep` returned non-zero in normal operation. v7.0 uses explicit error handling throughout with no silent failures.
+
+### Breaking Changes
+- **Removed `set -euo pipefail`** — all error handling is now explicit with `if ! cmd; then`
+- **Lock file** prevents concurrent runs — second instance exits with clear message
+
+### New Features
+- **`die()` function** — fatal errors always visible on both stdout and stderr
+- **Timestamped logging** — all output uses `[HH:MM:SS LEVEL]` format
+- **`DEBUG` log level** — separate from `INFO`, only shown with `--debug`
+- **Lock file** (`/tmp/backupdb.lock`) — prevents overlapping cron runs with stale PID detection
+- **Signal handling** — `trap cleanup EXIT INT TERM` for clean shutdown
+- **Script directory resolution** — `.env` lookup uses `$SCRIPT_DIR/BackupDB.env` (works from any CWD)
+
+### Security Improvements
+- **Secure MySQL credentials** — uses `--defaults-extra-file` temp file instead of `-p"password"` in process list
+- **S3 upload filtering** — `--exclude "*" --include "*.gz"` prevents uploading non-backup files
+
+### Bug Fixes
+| Bug | Fix |
+|-----|-----|
+| `set -u` + unset `$VGX_DB_HOSTS` crashes | All env vars use `${VAR:-default}` |
+| `sha256sum` missing on macOS | Auto-detects `sha256sum` vs `shasum -a 256` |
+| `check_for_updates` pipeline crash | Added `\|\| true` to grep pipeline |
+| `git status --porcelain \| grep -q '.'` | Captures to variable, tests with `[[ -n ]]` |
+| `grep -Ev` returns 1 if all system DBs | Added `\|\| true` |
+| `validate_config` kills script via `set -e` | Explicit `if ! validate_config; then die` |
+| Passwords visible in `ps` via `xargs bash -c` | Uses `--defaults-extra-file` temp file |
+| `export -f` for parallel backups | Replaced with background `&` jobs + `wait` |
+| `cd` in upload functions mutates global CWD | Wrapped in subshells `(cd ... && cmd)` |
+| `cleanup_local_backups` does `rm -rf $BACKUP_DIR` | Only deletes `.sql.gz` files |
+| `--debug` flag parsed too late | Arguments parsed before env loading or config |
+
+### Backblaze B2 / S3-Compatible Fixes
+| Issue | Fix |
+|-------|-----|
+| `aws s3 ls` validation unreliable on B2 | Uses `aws s3 ls "s3://$BUCKET/"` (list specific bucket) |
+| `--endpoint-url=` format causes errors | Uses space-separated `--endpoint-url "$S3_ENDPOINT"` |
+| `--region` not passed to AWS CLI | Included in `aws_cmd` when `S3_REGION` is set |
+| Upload failure crashes script | Captures output, shows error, returns 1 |
+| Upload of non-backup files to S3 | Added `--exclude "*" --include "*.gz"` filter |
+
+### Script Structure (New Order)
+```
+1. Shell header + copyright (NO set -euo pipefail)
+2. Colors, mode defaults, VERSION="7.0"
+3. die() + log() — minimal functions for arg parsing
+4. show_help() + show_version()
+5. Parse arguments (--debug, --test, --dry-run, --help, --version)
+6. load_env_file() + load env (script dir → CWD → $HOME)
+7. Configuration variables (all with :- defaults)
+8. Date + cross-platform checksum detection
+9. Lock file + trap cleanup + create_mysql_defaults()
+10. Utility functions (check_for_updates, check_command, show_config, etc.)
+11. Validation functions
+12. Storage/upload functions (git, s3, onedrive)
+13. Backup functions (backup_database, run_backups)
+14. Main execution
+```
+
+---
+
 ## Version 6.9 (September 17, 2025) - Parallel Backups & Performance Optimizations
 
 ### 🚀 Major Features

@@ -8,7 +8,7 @@
 
 **Simple, automated MySQL backups to Git, S3, or OneDrive**
 
-[![Version](https://img.shields.io/badge/version-6.9-blue.svg)](RELEASE_NOTES.md)
+[![Version](https://img.shields.io/badge/version-7.0-blue.svg)](RELEASE_NOTES.md)
 [![Storage](https://img.shields.io/badge/storage-Git%20%7C%20S3%20%7C%20OneDrive-green.svg)](#storage-backends)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#supported-platforms)
 
