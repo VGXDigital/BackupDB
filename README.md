@@ -165,3 +165,7 @@ Storage Location/
 ---
 
 **[Repository Link](https://github.com/VGXConsulting/BackupDB)**
+
+<p align="center">
+  Built with ❤️ by <a href="https://vgx.digital"><strong>VGX Consulting</strong></a>
+</p>
