@@ -4,8 +4,8 @@
 # Copyright (c) 2025-2026 VGX Consulting by Vijendra Malhotra. All rights reserved.
 # https://vgx.digital
 #
-# Version: 7.0
-# Modified: February 16, 2026
+# Version: 7.1
+# Modified: February 19, 2026
 #
 # DESCRIPTION:
 # Automated MySQL database backups with multi-storage backend support.
@@ -33,7 +33,7 @@ DEBUG_MODE=false
 DRY_RUN=false
 
 # Script identity
-VERSION="7.0"
+VERSION="7.1"
 SCRIPT_NAME="BackupDB"
 GITHUB_REPO="https://raw.githubusercontent.com/VGXConsulting/BackupDB/refs/heads/main/BackupDB.sh"
 
@@ -42,52 +42,32 @@ LOCK_FILE="/tmp/backupdb.lock"
 
 # Temp files to clean up on exit
 MYSQL_DEFAULTS_FILE=""
-EXIT_CODE_DIR=""
 
 ###############################################################################
 # MINIMAL FUNCTIONS — available before anything else
 ###############################################################################
 
-# Fatal error — always visible on both stdout and stderr
+# Fatal error — visible on stderr
 die() {
     echo -e "${RED}[$(date '+%H:%M:%S') FATAL] $*${NC}" >&2
-    echo -e "${RED}[$(date '+%H:%M:%S') FATAL] $*${NC}"
     exit 1
 }
 
 # Unified logging function with timestamps
 log() {
-    local level=$1
-    shift
-    local message="$*"
-    local timestamp
-    timestamp=$(date '+%H:%M:%S')
+    local level=$1; shift
+    local ts
+    ts=$(date '+%H:%M:%S')
 
     case $level in
-        "DEBUG")
-            if [[ "$DEBUG_MODE" == "true" ]]; then
-                echo -e "${BLUE}[$timestamp DEBUG] $message${NC}"
-            fi
-            ;;
-        "ERROR")
-            echo -e "${RED}[$timestamp ERROR] $message${NC}" >&2
-            ;;
-        "WARN")
-            echo -e "${YELLOW}[$timestamp WARN] $message${NC}" >&2
-            ;;
-        "SUCCESS")
-            echo -e "${GREEN}[$timestamp SUCCESS] $message${NC}"
-            ;;
-        "INFO")
-            # In production mode, suppress INFO unless test/debug
-            if [[ "$TEST_MODE" == "true" || "$DEBUG_MODE" == "true" ]]; then
-                echo "[$timestamp INFO] $message"
-            fi
-            ;;
-        *)
-            echo "[$timestamp $level] $message"
-            ;;
+        DEBUG)   [[ "$DEBUG_MODE" == "true" ]] && echo -e "${BLUE}[$ts DEBUG] $*${NC}" ;;
+        ERROR)   echo -e "${RED}[$ts ERROR] $*${NC}" >&2 ;;
+        WARN)    echo -e "${YELLOW}[$ts WARN] $*${NC}" >&2 ;;
+        SUCCESS) echo -e "${GREEN}[$ts SUCCESS] $*${NC}" ;;
+        INFO)    [[ "$TEST_MODE" == "true" || "$DEBUG_MODE" == "true" ]] && echo "[$ts INFO] $*" ;;
+        *)       echo "[$ts $level] $*" ;;
     esac
+    return 0
 }
 
 ###############################################################################
@@ -96,7 +76,7 @@ log() {
 
 show_help() {
     cat << 'EOF'
-DATABASE BACKUP SCRIPT v7.0 - SIMPLIFIED & OPTIMIZED
+DATABASE BACKUP SCRIPT v7.1 - SIMPLIFIED & OPTIMIZED
 
 USAGE:
   ./BackupDB.sh [OPTIONS]
@@ -281,41 +261,30 @@ S3_REGION="${VGX_DB_S3_REGION:-}"
 ONEDRIVE_REMOTE="${ONEDRIVE_REMOTE:-}"
 ONEDRIVE_PATH="${ONEDRIVE_PATH:-/DatabaseBackups}"
 
-# Database configuration — safe defaults for all arrays
-if [[ -n "${VGX_DB_HOSTS:-}" ]]; then
-    IFS=',' read -ra DB_HOSTS <<< "$VGX_DB_HOSTS"
-else
-    DB_HOSTS=("localhost")
-fi
+# Parse comma-separated env var into array, with a default value
+# Usage: parse_csv_var ARRAY_NAME "env_value" "default"
+parse_csv_var() {
+    local -n arr=$1
+    local value="$2"
+    local default="$3"
+    if [[ -n "$value" ]]; then
+        IFS=',' read -ra arr <<< "$value"
+    else
+        arr=("$default")
+    fi
+}
 
-if [[ -n "${VGX_DB_USERS:-}" ]]; then
-    IFS=',' read -ra DB_USERS <<< "$VGX_DB_USERS"
-else
-    DB_USERS=("root")
-fi
-
-if [[ -n "${VGX_DB_PASSWORDS:-}" ]]; then
-    IFS=',' read -ra DB_PASSWORDS <<< "$VGX_DB_PASSWORDS"
-else
-    DB_PASSWORDS=("password")
-fi
-
-if [[ -n "${VGX_DB_PORTS:-}" ]]; then
-    IFS=',' read -ra DB_PORTS <<< "$VGX_DB_PORTS"
-else
-    DB_PORTS=("3306")
-fi
+# Database configuration
+parse_csv_var DB_HOSTS     "${VGX_DB_HOSTS:-}"     "localhost"
+parse_csv_var DB_USERS     "${VGX_DB_USERS:-}"     "root"
+parse_csv_var DB_PASSWORDS "${VGX_DB_PASSWORDS:-}" "password"
+parse_csv_var DB_PORTS     "${VGX_DB_PORTS:-}"     "3306"
 
 ###############################################################################
 # DATE & CROSS-PLATFORM CHECKSUM
 ###############################################################################
 
 TODAY=$(date +%Y%m%d)
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    YESTERDAY=$(date -v -1d +%Y%m%d)
-else
-    YESTERDAY=$(date --date="yesterday" +%Y%m%d)
-fi
 
 # Detect checksum command: sha256sum (Linux) vs shasum -a 256 (macOS)
 CHECKSUM_CMD=""
@@ -342,12 +311,6 @@ cleanup() {
     if [[ -n "$MYSQL_DEFAULTS_FILE" && -f "$MYSQL_DEFAULTS_FILE" ]]; then
         rm -f "$MYSQL_DEFAULTS_FILE"
         log DEBUG "Removed mysql defaults file"
-    fi
-
-    # Remove exit code temp directory
-    if [[ -n "$EXIT_CODE_DIR" && -d "$EXIT_CODE_DIR" ]]; then
-        rm -rf "$EXIT_CODE_DIR"
-        log DEBUG "Removed exit code directory"
     fi
 
     # Release lock file
@@ -453,14 +416,8 @@ show_config() {
         "s3")
             echo "  S3 Bucket: $S3_BUCKET"
             echo "  S3 Prefix: $S3_PREFIX"
-            if [[ -n "$S3_ENDPOINT" ]]; then
-                echo "  S3 Endpoint: $S3_ENDPOINT"
-            else
-                echo "  S3 Endpoint: AWS Default"
-            fi
-            if [[ -n "$S3_REGION" ]]; then
-                echo "  S3 Region: $S3_REGION"
-            fi
+            echo "  S3 Endpoint: ${S3_ENDPOINT:-AWS Default}"
+            [[ -n "$S3_REGION" ]] && echo "  S3 Region: $S3_REGION"
             ;;
         "onedrive")
             echo "  OneDrive Remote: $ONEDRIVE_REMOTE"
@@ -475,24 +432,12 @@ show_config() {
 
 # Cleanup local backups after successful upload — only deletes .sql.gz files
 cleanup_local_backups() {
-    if [[ "$DELETE_LOCAL_BACKUPS" != "true" ]]; then
-        log DEBUG "Local backup cleanup disabled"
+    if [[ "$DELETE_LOCAL_BACKUPS" != "true" || ! -d "$BACKUP_DIR" ]]; then
+        log DEBUG "Local backup cleanup skipped"
         return 0
     fi
-    if [[ ! -d "$BACKUP_DIR" ]]; then
-        return 0
-    fi
-
-    local count
-    count=$(find "$BACKUP_DIR" -name "*.sql.gz" -type f 2>/dev/null | wc -l || true)
-    count=$(echo "$count" | tr -d ' ')
-
-    if [[ "$count" -gt 0 ]]; then
-        find "$BACKUP_DIR" -name "*.sql.gz" -type f -delete 2>/dev/null || true
-        log WARN "Deleted $count local backup file(s) from: $BACKUP_DIR"
-    else
-        log DEBUG "No local backup files to clean up"
-    fi
+    find "$BACKUP_DIR" -name "*.sql.gz" -type f -delete 2>/dev/null || true
+    log WARN "Deleted local backup files from: $BACKUP_DIR"
 }
 
 ###############################################################################
@@ -611,21 +556,12 @@ validate_database() {
             local port="${DB_PORTS[$i]:-3306}"
 
             log INFO "Testing connection to database: $host:$port (user: $user)"
-
             create_mysql_defaults "$password"
 
-            if [[ "$DEBUG_MODE" == "true" ]]; then
-                log DEBUG "mysql --defaults-extra-file=<tmpfile> -h '$host' -P '$port' -u '$user' -e 'SELECT 1;'"
-                local test_output
-                if ! test_output=$(mysql --defaults-extra-file="$MYSQL_DEFAULTS_FILE" -h "$host" -P "$port" -u "$user" -e "SELECT 1;" 2>&1); then
-                    log ERROR "Connection failed to $host:$port with user '$user': $test_output"
-                    return 1
-                fi
-            else
-                if ! mysql --defaults-extra-file="$MYSQL_DEFAULTS_FILE" -h "$host" -P "$port" -u "$user" -e "SELECT 1;" >/dev/null 2>&1; then
-                    log ERROR "Connection failed to $host:$port with user '$user'. Run with --debug for details."
-                    return 1
-                fi
+            local test_output
+            if ! test_output=$(mysql --defaults-extra-file="$MYSQL_DEFAULTS_FILE" -h "$host" -P "$port" -u "$user" -e "SELECT 1;" 2>&1); then
+                log ERROR "Connection failed to $host:$port with user '$user': $test_output"
+                return 1
             fi
         done
         log SUCCESS "All database connections successful!"
@@ -637,14 +573,8 @@ validate_database() {
 validate_config() {
     local test_connection=${1:-false}
     log INFO "Validating configuration..."
-    if ! validate_storage "$test_connection"; then
-        return 1
-    fi
-    if ! validate_database "$test_connection"; then
-        return 1
-    fi
+    validate_storage "$test_connection" && validate_database "$test_connection" || return 1
     log SUCCESS "Configuration validation passed!"
-    return 0
 }
 
 ###############################################################################
@@ -720,24 +650,9 @@ upload_onedrive() {
     log INFO "Uploading to OneDrive..."
 
     local target_path="${ONEDRIVE_REMOTE}:${ONEDRIVE_PATH}/${TODAY}"
-    local upload_failed=false
 
-    while IFS= read -r -d '' file; do
-        local relative_path="${file#$backup_path/}"
-        local target_dir
-        target_dir=$(dirname "$target_path/$relative_path")
-
-        rclone mkdir "$target_dir" 2>/dev/null || true
-
-        log INFO "Uploading: $relative_path"
-        if ! rclone copy "$file" "$target_dir" 2>/dev/null; then
-            log ERROR "Failed to upload: $relative_path"
-            upload_failed=true
-        fi
-    done < <(find "$backup_path" -name "*.gz" -type f -print0 2>/dev/null)
-
-    if [[ "$upload_failed" == "true" ]]; then
-        log ERROR "Some OneDrive uploads failed"
+    if ! rclone copy "$backup_path" "$target_path" --include "*.gz" 2>/dev/null; then
+        log ERROR "OneDrive upload failed"
         return 1
     fi
 
@@ -791,7 +706,13 @@ backup_database() {
 
     # Compare with yesterday's backup if incremental backups are enabled
     if [[ "$INCREMENTAL_BACKUPS" == "true" && -n "$CHECKSUM_CMD" ]]; then
-        local yesterday_file="${backup_path}/${YESTERDAY}_${db}.sql.gz"
+        local yesterday
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            yesterday=$(date -v -1d +%Y%m%d)
+        else
+            yesterday=$(date --date="yesterday" +%Y%m%d)
+        fi
+        local yesterday_file="${backup_path}/${yesterday}_${db}.sql.gz"
         if [[ -f "$yesterday_file" ]]; then
             log DEBUG "Comparing with yesterday's backup for $db..."
             local current_hash yesterday_hash
@@ -819,10 +740,6 @@ backup_database() {
 run_backups() {
     local backup_path="$1"
     mkdir -p "$backup_path"
-
-    # Create a temporary directory for exit codes
-    EXIT_CODE_DIR=$(mktemp -d)
-    log DEBUG "Exit code directory: $EXIT_CODE_DIR"
 
     # Clean up old Git backups based on retention policy
     if [[ "$STORAGE_TYPE" == "git" && "$GIT_RETENTION_DAYS" -ge 0 ]]; then
@@ -998,7 +915,3 @@ echo "======================================================================"
 echo "SUCCESS: Backup process completed successfully at $(date)"
 echo "Total execution time: $(( $(date +%s) - START_TIME )) seconds"
 echo "======================================================================"
-
-# Force output flush for cron environments
-exec 1>&1 2>&2
-sleep 0.1

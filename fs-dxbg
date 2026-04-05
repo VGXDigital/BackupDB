@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<!--
+  VGX File Share - Download Page
+  Copyright (c) 2026 VGX Digital. All rights reserved.
+  Version: 2.1.1
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download Files - VGX File Share</title>
+    <link rel="icon" type="image/png" href="/static/img/favicon.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Ubuntu:wght@400;500;700&family=Ubuntu+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        display: ['Montserrat', 'system-ui', 'sans-serif'],
+                        body: ['Ubuntu', 'system-ui', 'sans-serif'],
+                        mono: ['Ubuntu Mono', 'monospace'],
+                    },
+                    colors: {
+                        vgx: {
+                            purple: '#8337c8',
+                            pink: '#d94a7d',
+                            dark: '#0a0a0a',
+                            light: '#fafaf9',
+                            muted: '#6b7280',
+                        }
+                    },
+                    animation: {
+                        'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
+                        'fade-up': 'fade-up 0.6s ease-out forwards',
+                        'fade-up-delayed': 'fade-up 0.6s ease-out 0.15s forwards',
+                    },
+                    keyframes: {
+                        'pulse-glow': {
+                            '0%, 100%': { opacity: '0.6' },
+                            '50%': { opacity: '1' },
+                        },
+                        'fade-up': {
+                            '0%': { opacity: '0', transform: 'translateY(20px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .gradient-text { background: linear-gradient(135deg, #8337c8, #d94a7d); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .btn-gradient { background: linear-gradient(135deg, #8337c8, #d94a7d); }
+        .btn-gradient:hover { background: linear-gradient(135deg, #9748d9, #e55b8e); }
+    </style>
+</head>
+<body class="font-body min-h-screen text-vgx-light overflow-x-hidden flex flex-col">
+
+    <!-- Background Image -->
+    <div class="fixed inset-0 z-0">
+        <img src="/static/img/background.jpg" alt="" class="w-full h-full object-cover">
+        <div class="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/40"></div>
+    </div>
+
+    <!-- Header -->
+    <header class="relative z-10 border-b border-white/10 backdrop-blur-xl bg-black/20">
+        <div class="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-3">
+                <img src="/static/img/logo.webp" alt="VGX" class="h-12" onerror="this.parentElement.innerHTML='<div class=\'flex items-center gap-3\'><div class=\'w-12 h-12 rounded-xl btn-gradient flex items-center justify-center\'><span class=\'font-display font-bold text-white text-lg\'>V</span></div><span class=\'font-display font-semibold text-2xl text-white\'>VGX File Share</span></div>'">
+                <span class="font-display font-semibold text-2xl text-white drop-shadow-lg">VGX File Share</span>
+            </a>
+            <div class="flex items-center gap-2 px-4 py-2 rounded-full bg-black/30 backdrop-blur border border-white/20">
+                <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse-glow"></div>
+                <span class="text-sm text-white/80">Secure download</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main -->
+    <main class="relative z-10 flex-1 flex items-center justify-center px-6 py-12">
+        <div class="w-full max-w-lg">
+
+            <!-- Header Section -->
+            <div class="text-center mb-8 opacity-0 animate-fade-up">
+                <div class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-vgx-purple/40 to-vgx-pink/30 flex items-center justify-center border border-white/20 shadow-lg backdrop-blur">
+                    <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
+                    </svg>
+                </div>
+                <h1 class="font-display text-3xl font-bold mb-2" style="color: #1a1a2e; text-shadow: 0 0 20px rgba(255,255,255,0.5);">
+                    1 file ready
+                </h1>
+                <p class="text-lg font-medium" style="color: #2d2d44; text-shadow: 0 0 10px rgba(255,255,255,0.4);">15.3 MB • Shared via VGX</p>
+            </div>
+
+            <!-- Status badge -->
+            <div class="flex justify-center mb-8 opacity-0 animate-fade-up-delayed">
+                <div class="flex items-center gap-2 px-4 py-2 rounded-full bg-white/80 backdrop-blur border border-white/50 shadow-lg">
+                    <svg class="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <span class="text-sm font-semibold" style="color: #1a1a2e;">47h 23m left</span>
+                </div>
+            </div>
+
+            <!-- Files Card -->
+            <div class="bg-black/50 backdrop-blur-xl rounded-3xl p-6 border border-white/10 shadow-2xl opacity-0 animate-fade-up-delayed">
+                <div class="space-y-3">
+                    
+                    <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10 hover:border-vgx-purple/30 hover:bg-white/[0.08] transition-all duration-300 group">
+                        <div class="flex items-center gap-4 min-w-0 flex-1">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-vgx-purple/30 to-vgx-pink/20 flex items-center justify-center shrink-0 group-hover:from-vgx-purple/40 group-hover:to-vgx-pink/30 transition-colors">
+                                <svg class="w-6 h-6 text-vgx-pink" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="font-medium truncate text-white">Leveraged-Growth-Technology-Audit-Report.pdf</p>
+                                <p class="text-sm text-white/40 font-mono">15.3 MB</p>
+                            </div>
+                        </div>
+                        <a href="/d/dxFHbgVM/22" class="btn-gradient px-5 py-2.5 rounded-xl font-display font-semibold text-sm text-white flex items-center gap-2 shadow-lg shadow-vgx-purple/20 hover:shadow-vgx-purple/30 transition-all hover:-translate-y-0.5">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                            </svg>
+                            Download
+                        </a>
+                    </div>
+                    
+                </div>
+
+                
+            </div>
+
+            <!-- Security note -->
+            <div class="flex items-center justify-center gap-2 mt-6 text-sm font-medium" style="color: #1a1a2e; text-shadow: 0 0 8px rgba(255,255,255,0.5);">
+                <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                <span>Files are encrypted and stored securely</span>
+            </div>
+
+            <!-- CTA -->
+            <p class="text-center mt-8">
+                <a href="/" class="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg bg-white/60 hover:bg-white/80 transition-colors" style="color: #4a1a6b;">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Share your own files
+                </a>
+            </p>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="relative z-10 py-6">
+        <div class="text-center text-sm font-medium" style="color: #1a1a2e; text-shadow: 0 0 8px rgba(255,255,255,0.4);">
+            © 2026 <span class="font-semibold">VGX Digital</span> • <span id="app-version">v...</span>
+        </div>
+        <div class="text-center mt-2">
+            <a href="https://vgx.digital" target="_blank" rel="noopener noreferrer" class="text-xs text-gray-500 hover:text-purple-600 transition-colors">Built by VGX Consulting</a>
+        </div>
+    </footer>
+
+    <script>
+        fetch('/api/version').then(r => r.json()).then(d => {
+            document.getElementById('app-version').textContent = 'v' + d.version;
+        }).catch(() => {});
+    </script>
+</body>
+</html>

@@ -4,6 +4,23 @@ A comprehensive database backup script with multi-storage backend support, autom
 
 ---
 
+## Version 7.1 (February 19, 2026) - Code Simplification
+
+### Simplifications
+- **Removed unused `EXIT_CODE_DIR`** — temp directory was created but never read from
+- **DRY array parsing** — replaced 4 identical `IFS=',' read -ra` blocks with `parse_csv_var()` helper
+- **Simplified `die()`** — removed redundant stdout echo (stderr is sufficient for fatal errors)
+- **Compact `log()` function** — one-liner cases instead of multi-line blocks
+- **Simplified `cleanup_local_backups()`** — removed unnecessary file counting before deletion
+- **Simplified `show_config()`** — inline default for S3 endpoint display
+- **Simplified `validate_database()`** — removed duplicated debug/non-debug connection test branches
+- **Simplified `upload_onedrive()`** — single `rclone copy --include "*.gz"` replaces file-by-file loop
+- **Lazy `YESTERDAY` computation** — only computed inside `backup_database()` when incremental check runs
+- **Removed no-op flush** — `exec 1>&1 2>&2` + `sleep 0.1` at script end were unnecessary
+- **Simplified `validate_config()`** — single-line `&&` chain instead of repeated `if ! ...; then return 1; fi`
+
+---
+
 ## Version 7.0 (February 16, 2026) - Robust Error Handling & Security Hardening
 
 ### Major Rewrite: Error Handling Framework
