@@ -52,11 +52,13 @@ Edit `BackupDB.env` with your settings. The script automatically loads this file
 | `VGX_DB_PASSWORDS` | Yes | Database passwords | `"password"` or `"pass1,pass2"` |
 
 ### Git Storage Variables
+
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `VGX_DB_GIT_REPO` | Git repository URL | `"git@github.com:user/backups.git"` |
 
-### S3 Storage Variables  
+### S3 Storage Variables
+
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `AWS_ACCESS_KEY_ID` | S3 access key | `"AKIA..."` |
@@ -65,12 +67,14 @@ Edit `BackupDB.env` with your settings. The script automatically loads this file
 | `VGX_DB_S3_ENDPOINT_URL` | S3 endpoint (non-AWS only) | `"https://s3.backblaze.com"` |
 
 ### OneDrive Storage Variables
+
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `ONEDRIVE_REMOTE` | rclone remote name | `"onedrive"` |
 | `ONEDRIVE_PATH` | OneDrive folder path | `"/DatabaseBackups"` |
 
 ### Optional Settings
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `VGX_DB_INCREMENTAL_BACKUPS` | `"true"` | Skip unchanged databases |
