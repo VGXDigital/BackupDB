@@ -590,12 +590,6 @@ upload_git() {
     (
         cd "$backup_path" || { log ERROR "Cannot cd to backup path: $backup_path"; return 1; }
 
-        # Update repository
-        if [[ -d ".git" ]]; then
-            log DEBUG "Pulling latest from Git..."
-            git pull || true
-        fi
-
         # Check for changes — capture to variable instead of piping to grep
         local status_output
         status_output=$(git status --porcelain 2>/dev/null || true)
@@ -896,6 +890,11 @@ if [[ "$STORAGE_TYPE" == "git" ]]; then
         log INFO "Cloning Git repository..."
         if ! git clone "$GIT_REPO" "$BACKUP_DIR"; then
             die "Failed to clone Git repository: $GIT_REPO"
+        fi
+    else
+        log INFO "Pulling latest from Git repository..."
+        if ! git -C "$BACKUP_DIR" pull; then
+            die "Failed to pull from Git repository: $GIT_REPO"
         fi
     fi
 fi
