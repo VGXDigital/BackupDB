@@ -23,11 +23,11 @@ For complete version history and migration guides, see **[RELEASE_NOTES.md](RELE
 ### Download Script and Sample Configuration
 ```bash
 # Download the script
-curl -O https://raw.githubusercontent.com/VGXConsulting/BackupDB/main/BackupDB.sh
+curl -O https://raw.githubusercontent.com/VGXDigital/BackupDB/main/BackupDB.sh
 chmod +x BackupDB.sh
 
 # Download sample configuration
-curl -O https://raw.githubusercontent.com/VGXConsulting/BackupDB/main/BackupDB.sample.env
+curl -O https://raw.githubusercontent.com/VGXDigital/BackupDB/main/BackupDB.sample.env
 cp BackupDB.sample.env BackupDB.env
 ```
 
@@ -87,8 +87,8 @@ Edit `BackupDB.env` with your settings. The script automatically loads this file
 ### Method 1: Local Installation
 ```bash
 # Download and install
-curl -O https://raw.githubusercontent.com/VGXConsulting/BackupDB/main/BackupDB.sh
-curl -O https://raw.githubusercontent.com/VGXConsulting/BackupDB/main/BackupDB.sample.env
+curl -O https://raw.githubusercontent.com/VGXDigital/BackupDB/main/BackupDB.sh
+curl -O https://raw.githubusercontent.com/VGXDigital/BackupDB/main/BackupDB.sample.env
 
 # Install script
 sudo cp BackupDB.sh /usr/local/bin/
@@ -110,7 +110,7 @@ echo "0 2 * * * cd /etc/backupdb && /usr/local/bin/BackupDB.sh" | sudo crontab -
 ### Method 2: Direct from GitHub (No Installation)
 ```bash
 # Download config to home directory
-curl -o $HOME/BackupDB.env https://raw.githubusercontent.com/VGXConsulting/BackupDB/main/BackupDB.sample.env
+curl -o $HOME/BackupDB.env https://raw.githubusercontent.com/VGXDigital/BackupDB/main/BackupDB.sample.env
 
 # Edit configuration
 nano $HOME/BackupDB.env
@@ -119,7 +119,7 @@ nano $HOME/BackupDB.env
 crontab -e
 
 # Add this line:
-0 2 * * * curl -s https://raw.githubusercontent.com/VGXConsulting/BackupDB/main/BackupDB.sh | /bin/bash
+0 2 * * * curl -s https://raw.githubusercontent.com/VGXDigital/BackupDB/main/BackupDB.sh | /bin/bash
 ```
 
 ## 🗂️ Backup File Structure
@@ -168,7 +168,7 @@ Storage Location/
 
 ---
 
-**[Repository Link](https://github.com/VGXConsulting/BackupDB)**
+**[Repository Link](https://github.com/VGXDigital/BackupDB)**
 
 <p align="center">
   Built with ❤️ by <a href="https://vgx.digital"><strong>VGX Consulting</strong></a>

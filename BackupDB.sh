@@ -35,7 +35,7 @@ DRY_RUN=false
 # Script identity
 VERSION="7.1"
 SCRIPT_NAME="BackupDB"
-GITHUB_REPO="https://raw.githubusercontent.com/VGXConsulting/BackupDB/refs/heads/main/BackupDB.sh"
+GITHUB_REPO="https://raw.githubusercontent.com/VGXDigital/BackupDB/refs/heads/main/BackupDB.sh"
 
 # Lock file path
 LOCK_FILE="/tmp/backupdb.lock"
@@ -384,7 +384,7 @@ check_for_updates() {
     if [[ -n "$remote_version" && "$remote_version" != "$VERSION" ]]; then
         echo
         log WARN "New version available: $remote_version (current: $VERSION)"
-        log INFO "Update available at: https://github.com/VGXConsulting/BackupDB"
+        log INFO "Update available at: https://github.com/VGXDigital/BackupDB"
         echo
     fi
 }
