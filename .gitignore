@@ -22,3 +22,6 @@ customer-*.env
 # OS files
 .DS_Store
 Thumbs.db
+
+# graphify knowledge graph output
+graphify-out/
