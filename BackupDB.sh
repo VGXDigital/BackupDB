@@ -4,11 +4,11 @@
 # Copyright (c) 2025-2026 VGX Consulting by Vijendra Malhotra. All rights reserved.
 # https://vgx.digital
 #
-# Version: 7.1
-# Modified: February 19, 2026
+# Version: 7.2
+# Modified: September 19, 2026
 #
 # DESCRIPTION:
-# Automated MySQL database backups with multi-storage backend support.
+# Automated MySQL/MariaDB and PostgreSQL database backups with multi-storage backend support.
 # Supports Git repositories, AWS S3, S3-compatible storage, and OneDrive.
 #
 # QUICK START:
@@ -33,7 +33,7 @@ DEBUG_MODE=false
 DRY_RUN=false
 
 # Script identity
-VERSION="7.1"
+VERSION="7.2"
 SCRIPT_NAME="BackupDB"
 GITHUB_REPO="https://raw.githubusercontent.com/VGXDigital/BackupDB/refs/heads/main/BackupDB.sh"
 
@@ -41,7 +41,7 @@ GITHUB_REPO="https://raw.githubusercontent.com/VGXDigital/BackupDB/refs/heads/ma
 LOCK_FILE="/tmp/backupdb.lock"
 
 # Temp files to clean up on exit
-MYSQL_DEFAULTS_FILE=""
+CRED_FILE=""
 
 ###############################################################################
 # MINIMAL FUNCTIONS — available before anything else
@@ -76,7 +76,7 @@ log() {
 
 show_help() {
     cat << 'EOF'
-DATABASE BACKUP SCRIPT v7.1 - SIMPLIFIED & OPTIMIZED
+DATABASE BACKUP SCRIPT v7.2 - SIMPLIFIED & OPTIMIZED
 
 USAGE:
   ./BackupDB.sh [OPTIONS]
@@ -125,9 +125,12 @@ QUICK SETUP:
 
   Database:
     export VGX_DB_HOSTS="db1.com,db2.com"
-    export VGX_DB_PORTS="3306,3307"             # Optional: defaults to 3306 for each host
+    export VGX_DB_TYPES="mysql,postgres"        # Optional: mysql (default), mariadb, postgres
+    export VGX_DB_PORTS="3306,3307"             # Optional: defaults to 3306 (mysql) / 5432 (postgres)
     export VGX_DB_USERS="user1,user2"
     export VGX_DB_PASSWORDS="pass1,pass2"
+    # A single VGX_DB_TYPES value applies to every host.
+    # Postgres needs psql + pg_dump; databases are listed via the "postgres" db.
 
   Performance:
     export VGX_DB_MAX_PARALLEL_JOBS=4             # Number of parallel DB backups (default: number of CPU cores)
@@ -278,7 +281,8 @@ parse_csv_var() {
 parse_csv_var DB_HOSTS     "${VGX_DB_HOSTS:-}"     "localhost"
 parse_csv_var DB_USERS     "${VGX_DB_USERS:-}"     "root"
 parse_csv_var DB_PASSWORDS "${VGX_DB_PASSWORDS:-}" "password"
-parse_csv_var DB_PORTS     "${VGX_DB_PORTS:-}"     "3306"
+parse_csv_var DB_PORTS     "${VGX_DB_PORTS:-}"     ""   # empty = engine default (3306/5432)
+parse_csv_var DB_TYPES     "${VGX_DB_TYPES:-}"     "mysql"
 
 ###############################################################################
 # DATE & CROSS-PLATFORM CHECKSUM
@@ -307,10 +311,10 @@ cleanup() {
     local exit_code=$?
     log DEBUG "Cleanup running (exit code: $exit_code)"
 
-    # Remove mysql defaults temp file (contains password)
-    if [[ -n "$MYSQL_DEFAULTS_FILE" && -f "$MYSQL_DEFAULTS_FILE" ]]; then
-        rm -f "$MYSQL_DEFAULTS_FILE"
-        log DEBUG "Removed mysql defaults file"
+    # Remove credentials temp file (contains password)
+    if [[ -n "$CRED_FILE" && -f "$CRED_FILE" ]]; then
+        rm -f "$CRED_FILE"
+        log DEBUG "Removed credentials file"
     fi
 
     # Release lock file
@@ -346,25 +350,70 @@ acquire_lock() {
 }
 
 ###############################################################################
-# MYSQL DEFAULTS FILE — keeps passwords out of the process list
+# CREDENTIALS FILE — keeps passwords out of the process list
 ###############################################################################
 
-# Create a temporary mysql defaults file for a given host/user/password/port
-# Usage: create_mysql_defaults <password>
-# Sets MYSQL_DEFAULTS_FILE to the path
-create_mysql_defaults() {
-    local password="$1"
+# Create a temporary credentials file: mysql defaults file or postgres .pgpass
+# Usage: create_cred_file <type> <password>
+# Sets CRED_FILE to the path
+create_cred_file() {
+    local type="$1"
+    local password="$2"
     # Remove old file if any
-    if [[ -n "$MYSQL_DEFAULTS_FILE" && -f "$MYSQL_DEFAULTS_FILE" ]]; then
-        rm -f "$MYSQL_DEFAULTS_FILE"
+    if [[ -n "$CRED_FILE" && -f "$CRED_FILE" ]]; then
+        rm -f "$CRED_FILE"
     fi
-    MYSQL_DEFAULTS_FILE=$(mktemp /tmp/backupdb_mycnf.XXXXXX)
-    chmod 600 "$MYSQL_DEFAULTS_FILE"
-    cat > "$MYSQL_DEFAULTS_FILE" <<MYCNF
-[client]
-password=${password}
-MYCNF
-    log DEBUG "Created mysql defaults file: $MYSQL_DEFAULTS_FILE"
+    CRED_FILE=$(mktemp /tmp/backupdb_cred.XXXXXX)
+    chmod 600 "$CRED_FILE"
+    if [[ "$type" == "postgres" ]]; then
+        # .pgpass format: host:port:db:user:password — escape \ and : in the password
+        password="${password//\\/\\\\}"
+        printf '*:*:*:*:%s\n' "${password//:/\\:}" > "$CRED_FILE"
+    else
+        printf '[client]\npassword=%s\n' "$password" > "$CRED_FILE"
+    fi
+    log DEBUG "Created $type credentials file: $CRED_FILE"
+}
+
+###############################################################################
+# DATABASE ENGINE HELPERS — mysql/mariadb and postgres
+###############################################################################
+
+# Normalise a VGX_DB_TYPES entry to "mysql" or "postgres"
+# Usage: type=$(db_type <index>) — missing entries fall back to the first type
+db_type() {
+    local type="${DB_TYPES[$1]:-${DB_TYPES[0]}}"
+    case "$(echo "$type" | tr '[:upper:]' '[:lower:]')" in
+        mysql|mariadb)          echo "mysql" ;;
+        postgres|postgresql|pg) echo "postgres" ;;
+        *) log ERROR "Unsupported database type: '$type' (expected: mysql, mariadb, postgres)"; return 1 ;;
+    esac
+}
+
+# Default port for a database type
+default_port() {
+    [[ "$1" == "postgres" ]] && echo 5432 || echo 3306
+}
+
+# Run a query and print rows without headers
+# Usage: db_query <type> <host> <port> <user> <sql>  (uses $CRED_FILE)
+db_query() {
+    local type="$1" host="$2" port="$3" user="$4" sql="$5"
+    if [[ "$type" == "postgres" ]]; then
+        PGPASSFILE="$CRED_FILE" psql -w -X -A -t -h "$host" -p "$port" -U "$user" -d postgres -c "$sql"
+    else
+        mysql --defaults-extra-file="$CRED_FILE" -N -B -h "$host" -P "$port" -u "$user" -e "$sql"
+    fi
+}
+
+# List user databases on a server (system databases excluded)
+# The grep may return 1 if all databases are system databases — that's OK
+db_list() {
+    if [[ "$1" == "postgres" ]]; then
+        db_query "$@" "SELECT datname FROM pg_database WHERE NOT datistemplate AND datallowconn AND datname <> 'postgres' ORDER BY 1;"
+    else
+        db_query "$@" "SHOW DATABASES;" | grep -Ev "mysql|information_schema|performance_schema|sys" || true
+    fi
 }
 
 ###############################################################################
@@ -425,6 +474,7 @@ show_config() {
             ;;
     esac
 
+    echo "  Database Types: ${DB_TYPES[*]}"
     echo "  Database Hosts: ${DB_HOSTS[*]}"
     echo "  Database Users: ${DB_USERS[*]}"
     echo "  Checksum Tool: ${CHECKSUM_CMD:-none (incremental disabled)}"
@@ -532,8 +582,16 @@ validate_storage() {
 validate_database() {
     local test_connection=${1:-false}
 
-    if ! check_command mysql; then return 1; fi
-    if ! check_command mysqldump; then return 1; fi
+    # Check client tools for each engine in use
+    local i type
+    for i in "${!DB_HOSTS[@]}"; do
+        type=$(db_type "$i") || return 1
+        if [[ "$type" == "postgres" ]]; then
+            check_command psql && check_command pg_dump || return 1
+        else
+            check_command mysql && check_command mysqldump || return 1
+        fi
+    done
 
     # Checksum tool is optional — already handled at startup
     if [[ "$INCREMENTAL_BACKUPS" == "true" && -z "$CHECKSUM_CMD" ]]; then
@@ -553,13 +611,14 @@ validate_database() {
             local host="${DB_HOSTS[$i]}"
             local user="${DB_USERS[$i]}"
             local password="${DB_PASSWORDS[$i]}"
-            local port="${DB_PORTS[$i]:-3306}"
+            local type; type=$(db_type "$i")
+            local port="${DB_PORTS[$i]:-$(default_port "$type")}"
 
-            log INFO "Testing connection to database: $host:$port (user: $user)"
-            create_mysql_defaults "$password"
+            log INFO "Testing $type connection to database: $host:$port (user: $user)"
+            create_cred_file "$type" "$password"
 
             local test_output
-            if ! test_output=$(mysql --defaults-extra-file="$MYSQL_DEFAULTS_FILE" -h "$host" -P "$port" -u "$user" -e "SELECT 1;" 2>&1); then
+            if ! test_output=$(db_query "$type" "$host" "$port" "$user" "SELECT 1;" 2>&1); then
                 log ERROR "Connection failed to $host:$port with user '$user': $test_output"
                 return 1
             fi
@@ -673,21 +732,29 @@ upload_backups() {
 
 # Create database backup for a single database
 backup_database() {
-    local host="$1"
-    local port="$2"
-    local user="$3"
-    local defaults_file="$4"
-    local db="$5"
-    local backup_path="$6"
+    local type="$1"
+    local host="$2"
+    local port="$3"
+    local user="$4"
+    local cred_file="$5"
+    local db="$6"
+    local backup_path="$7"
 
     local backup_file="${backup_path}/${TODAY}_${db}.sql"
 
-    log INFO "Backing up database: $db from $host:$port"
+    log INFO "Backing up $type database: $db from $host:$port"
 
-    # Create backup using defaults file (password not in process list)
-    if ! mysqldump --defaults-extra-file="$defaults_file" --add-drop-table --allow-keywords --skip-dump-date -c \
-        -h "$host" -P "$port" -u "$user" "$db" > "$backup_file" 2>/dev/null; then
-        log ERROR "mysqldump failed for database: $db"
+    # Create backup using credentials file (password not in process list)
+    local dump_ok=true
+    if [[ "$type" == "postgres" ]]; then
+        PGPASSFILE="$cred_file" pg_dump -w --clean --if-exists \
+            -h "$host" -p "$port" -U "$user" -d "$db" > "$backup_file" 2>/dev/null || dump_ok=false
+    else
+        mysqldump --defaults-extra-file="$cred_file" --add-drop-table --allow-keywords --skip-dump-date -c \
+            -h "$host" -P "$port" -u "$user" "$db" > "$backup_file" 2>/dev/null || dump_ok=false
+    fi
+    if [[ "$dump_ok" != "true" ]]; then
+        log ERROR "$type dump failed for database: $db"
         rm -f "$backup_file"
         return 1
     fi
@@ -710,8 +777,9 @@ backup_database() {
         if [[ -f "$yesterday_file" ]]; then
             log DEBUG "Comparing with yesterday's backup for $db..."
             local current_hash yesterday_hash
-            current_hash=$($CHECKSUM_CMD "$backup_file" | awk '{print $1}')
-            yesterday_hash=$(gunzip -c "$yesterday_file" | $CHECKSUM_CMD | awk '{print $1}')
+            # pg_dump >= 17.6/16.10 wraps output in \restrict <random key> lines — ignore them
+            current_hash=$(grep -Ev '^\\(un)?restrict ' "$backup_file" | $CHECKSUM_CMD | awk '{print $1}')
+            yesterday_hash=$(gunzip -c "$yesterday_file" | grep -Ev '^\\(un)?restrict ' | $CHECKSUM_CMD | awk '{print $1}')
 
             if [[ "$current_hash" == "$yesterday_hash" ]]; then
                 log INFO "No changes detected in $db, skipping."
@@ -748,25 +816,24 @@ run_backups() {
         local host="${DB_HOSTS[$i]}"
         local user="${DB_USERS[$i]}"
         local password="${DB_PASSWORDS[$i]}"
-        local port="${DB_PORTS[$i]:-3306}"
+        local type; type=$(db_type "$i")
+        local port="${DB_PORTS[$i]:-$(default_port "$type")}"
 
-        log INFO "Processing database host: $host:$port (user: $user)"
+        log INFO "Processing $type database host: $host:$port (user: $user)"
 
-        # Create defaults file for this host (keeps password out of process list)
-        create_mysql_defaults "$password"
+        # Create credentials file for this host (keeps password out of process list)
+        create_cred_file "$type" "$password"
 
-        # Test connection using defaults file
-        if ! mysql --defaults-extra-file="$MYSQL_DEFAULTS_FILE" -h "$host" -P "$port" -u "$user" -e "SELECT 1;" >/dev/null 2>&1; then
-            log ERROR "Cannot connect to database: $host:$port with user '$user'"
+        # Test connection using credentials file
+        if ! db_query "$type" "$host" "$port" "$user" "SELECT 1;" >/dev/null 2>&1; then
+            log ERROR "Cannot connect to $type database: $host:$port with user '$user'"
             overall_failed=true
             continue
         fi
 
         # Get database list (exclude system databases)
-        # The grep may return 1 if all databases are system databases — that's OK
         local databases
-        databases=$(mysql --defaults-extra-file="$MYSQL_DEFAULTS_FILE" -h "$host" -P "$port" -u "$user" \
-            -e "SHOW DATABASES;" 2>/dev/null | tail -n +2 | grep -Ev "mysql|information_schema|performance_schema|sys" || true)
+        databases=$(db_list "$type" "$host" "$port" "$user" 2>/dev/null)
 
         if [[ -z "$databases" ]]; then
             log WARN "No user databases found on $host:$port"
@@ -784,7 +851,7 @@ run_backups() {
             [[ -z "$db" ]] && continue
 
             # Launch backup in background
-            backup_database "$host" "$port" "$user" "$MYSQL_DEFAULTS_FILE" "$db" "$backup_path" &
+            backup_database "$type" "$host" "$port" "$user" "$CRED_FILE" "$db" "$backup_path" &
             pids+=($!)
             db_names+=("$db")
             job_count=$((job_count + 1))

@@ -4,11 +4,11 @@
   </a>
 </p>
 
-# BackupDB - MySQL Database Backup Script
+# BackupDB - MySQL, MariaDB & PostgreSQL Backup Script
 
-**Simple, automated MySQL backups to Git, S3, or OneDrive**
+**Simple, automated MySQL, MariaDB and PostgreSQL backups to Git, S3, or OneDrive**
 
-[![Version](https://img.shields.io/badge/version-7.1-blue.svg)](RELEASE_NOTES.md)
+[![Version](https://img.shields.io/badge/version-7.2-blue.svg)](RELEASE_NOTES.md)
 [![Storage](https://img.shields.io/badge/storage-Git%20%7C%20S3%20%7C%20OneDrive-green.svg)](#storage-backends)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#supported-platforms)
 
@@ -50,6 +50,10 @@ Edit `BackupDB.env` with your settings. The script automatically loads this file
 | `VGX_DB_HOSTS` | Yes | Database servers | `"localhost"` or `"db1.com,db2.com"` |
 | `VGX_DB_USERS` | Yes | Database usernames | `"backup_user"` or `"user1,user2"` |
 | `VGX_DB_PASSWORDS` | Yes | Database passwords | `"password"` or `"pass1,pass2"` |
+| `VGX_DB_TYPES` | No | Engine per host (`mysql` default, `mariadb`, `postgres`); one value applies to all hosts | `"postgres"` or `"mysql,postgres"` |
+| `VGX_DB_PORTS` | No | Port per host (default 3306 for MySQL, 5432 for Postgres) | `"3306,5432"` |
+
+PostgreSQL hosts need `psql` and `pg_dump` installed (ideally the same major version as the server or newer). Each non-template database except `postgres` is dumped as plain SQL with `--clean --if-exists`. Roles and tablespaces are not included; run `pg_dumpall --globals-only` separately if you need them.
 
 ### Git Storage Variables
 
@@ -160,7 +164,7 @@ Storage Location/
 
 **Database Connection Failed**
 - Verify database credentials and network access
-- Test: `mysql -h host -u user -p`
+- Test: `mysql -h host -u user -p` or `psql -h host -U user -d postgres`
 
 ## 📖 Settings Documentation
 

@@ -4,6 +4,21 @@ A comprehensive database backup script with multi-storage backend support, autom
 
 ---
 
+## Version 7.2 (September 19, 2026) - PostgreSQL Support
+
+### New Features
+- **PostgreSQL backups** — set `VGX_DB_TYPES="postgres"` (or per host, e.g. `"mysql,postgres"`). Uses `psql` to list databases and `pg_dump --clean --if-exists` to dump each one as plain SQL
+- **Per-engine default ports** — 3306 for MySQL/MariaDB, 5432 for Postgres when `VGX_DB_PORTS` is empty
+- **Postgres credentials stay out of the process list** — passwords go into a temporary 0600 `.pgpass` file passed via `PGPASSFILE`, same approach as the MySQL defaults file
+- **Incremental check ignores `\restrict` lines** — newer `pg_dump` releases add a random restrict key on every run, which would otherwise defeat the unchanged-database skip
+
+### Internal
+- `create_mysql_defaults` → `create_cred_file`, `MYSQL_DEFAULTS_FILE` → `CRED_FILE`
+- New `db_type`, `default_port`, `db_query`, `db_list` helpers
+- Default engine stays `mysql`, so existing configs run unchanged
+
+---
+
 ## Version 7.1 (February 19, 2026) - Code Simplification
 
 ### Simplifications
