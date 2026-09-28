@@ -4,8 +4,8 @@
 # Copyright (c) 2025-2026 VGX Consulting by Vijendra Malhotra. All rights reserved.
 # https://vgx.digital
 #
-# Version: 7.2
-# Modified: September 19, 2026
+# Version: 7.3
+# Modified: September 28, 2026
 #
 # DESCRIPTION:
 # Automated MySQL/MariaDB and PostgreSQL database backups with multi-storage backend support.
@@ -33,7 +33,7 @@ DEBUG_MODE=false
 DRY_RUN=false
 
 # Script identity
-VERSION="7.2"
+VERSION="7.3"
 SCRIPT_NAME="BackupDB"
 GITHUB_REPO="https://raw.githubusercontent.com/VGXDigital/BackupDB/refs/heads/main/BackupDB.sh"
 
@@ -76,7 +76,7 @@ log() {
 
 show_help() {
     cat << 'EOF'
-DATABASE BACKUP SCRIPT v7.2 - SIMPLIFIED & OPTIMIZED
+DATABASE BACKUP SCRIPT v7.3 - SIMPLIFIED & OPTIMIZED
 
 USAGE:
   ./BackupDB.sh [OPTIONS]
@@ -249,7 +249,7 @@ GIT_RETENTION_DAYS="${VGX_DB_GIT_RETENTION_DAYS:--1}"
 INCREMENTAL_BACKUPS="${VGX_DB_INCREMENTAL_BACKUPS:-true}"
 
 # Number of parallel backup jobs
-MAX_PARALLEL_JOBS="${VGX_DB_MAX_PARALLEL_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
+MAX_PARALLEL_JOBS="${VGX_DB_MAX_PARALLEL_JOBS:-$(getconf _NPROCESSORS_ONLN || echo 1)}"
 
 # Git configuration
 GIT_REPO="${VGX_DB_GIT_REPO:-git@github.com:YourUsername/DBBackups.git}"
@@ -292,9 +292,9 @@ TODAY=$(date +%Y%m%d)
 
 # Detect checksum command: sha256sum (Linux) vs shasum -a 256 (macOS)
 CHECKSUM_CMD=""
-if command -v sha256sum >/dev/null 2>&1; then
+if [[ -n "$(command -v sha256sum)" ]]; then
     CHECKSUM_CMD="sha256sum"
-elif command -v shasum >/dev/null 2>&1; then
+elif [[ -n "$(command -v shasum)" ]]; then
     CHECKSUM_CMD="shasum -a 256"
 else
     log WARN "No SHA-256 checksum tool found — incremental backups will be disabled"
@@ -317,10 +317,13 @@ cleanup() {
         log DEBUG "Removed credentials file"
     fi
 
+    # Dump stderr temp files left behind if a run was interrupted mid-dump
+    rm -f /tmp/backupdb_err.*
+
     # Release lock file
     if [[ -f "$LOCK_FILE" ]]; then
         local lock_pid
-        lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || true)
+        lock_pid=$(cat "$LOCK_FILE" || true)
         if [[ "$lock_pid" == "$$" ]]; then
             rm -f "$LOCK_FILE"
             log DEBUG "Released lock file"
@@ -336,12 +339,13 @@ trap cleanup EXIT INT TERM
 acquire_lock() {
     if [[ -f "$LOCK_FILE" ]]; then
         local existing_pid
-        existing_pid=$(cat "$LOCK_FILE" 2>/dev/null || true)
+        existing_pid=$(cat "$LOCK_FILE" || true)
         # Check if the process is still running
-        if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
+        local kill_out
+        if [[ -n "$existing_pid" ]] && kill_out=$(kill -0 "$existing_pid" 2>&1); then
             die "Another instance is already running (PID: $existing_pid). Remove $LOCK_FILE if this is incorrect."
         else
-            log WARN "Stale lock file found (PID: $existing_pid no longer running). Removing."
+            log WARN "Stale lock file found (PID: $existing_pid no longer running: $kill_out). Removing."
             rm -f "$LOCK_FILE"
         fi
     fi
@@ -412,7 +416,9 @@ db_list() {
     if [[ "$1" == "postgres" ]]; then
         db_query "$@" "SELECT datname FROM pg_database WHERE NOT datistemplate AND datallowconn AND datname <> 'postgres' ORDER BY 1;"
     else
-        db_query "$@" "SHOW DATABASES;" | grep -Ev "mysql|information_schema|performance_schema|sys" || true
+        local out
+        out=$(db_query "$@" "SHOW DATABASES;") || return 1
+        echo "$out" | grep -Ev "mysql|information_schema|performance_schema|sys" || true
     fi
 }
 
@@ -422,13 +428,17 @@ db_list() {
 
 # Check for script updates (non-blocking, never crashes)
 check_for_updates() {
-    if ! command -v curl >/dev/null 2>&1; then
+    if [[ -z "$(command -v curl)" ]]; then
         log DEBUG "curl not found, skipping update check"
         return 0
     fi
 
-    local remote_version
-    remote_version=$(curl -s --max-time 5 "$GITHUB_REPO" 2>/dev/null | grep "^VERSION=" | head -1 | cut -d'"' -f2 || true)
+    local remote_script remote_version
+    if ! remote_script=$(curl -sS --max-time 5 "$GITHUB_REPO" 2>&1); then
+        log DEBUG "Update check failed: $remote_script"
+        return 0
+    fi
+    remote_version=$(echo "$remote_script" | grep "^VERSION=" | head -1 | cut -d'"' -f2 || true)
 
     if [[ -n "$remote_version" && "$remote_version" != "$VERSION" ]]; then
         echo
@@ -441,7 +451,7 @@ check_for_updates() {
 # Check if a required command exists
 check_command() {
     local cmd=$1
-    if ! command -v "$cmd" >/dev/null 2>&1; then
+    if [[ -z "$(command -v "$cmd")" ]]; then
         log ERROR "Required command '$cmd' not found. Please install it."
         return 1
     fi
@@ -486,7 +496,7 @@ cleanup_local_backups() {
         log DEBUG "Local backup cleanup skipped"
         return 0
     fi
-    find "$BACKUP_DIR" -name "*.sql.gz" -type f -delete 2>/dev/null || true
+    find "$BACKUP_DIR" -name "*.sql.gz" -type f -delete || log WARN "Some local backup files could not be deleted"
     log WARN "Deleted local backup files from: $BACKUP_DIR"
 }
 
@@ -526,8 +536,9 @@ validate_storage() {
             fi
             if [[ "$test_connection" == "true" ]]; then
                 log INFO "Testing Git connection..."
-                if ! git ls-remote "$GIT_REPO" >/dev/null 2>&1; then
-                    log ERROR "Git connection failed. Check repository URL and SSH keys."
+                local git_out
+                if ! git_out=$(git ls-remote "$GIT_REPO" 2>&1); then
+                    log ERROR "Git connection failed. Check repository URL and SSH keys: $git_out"
                     return 1
                 fi
                 log SUCCESS "Git connection successful"
@@ -562,7 +573,10 @@ validate_storage() {
             if [[ "$test_connection" == "true" ]]; then
                 log INFO "Testing OneDrive connection..."
                 local remotes
-                remotes=$(rclone listremotes 2>/dev/null || true)
+                if ! remotes=$(rclone listremotes); then
+                    log ERROR "rclone listremotes failed"
+                    return 1
+                fi
                 if ! echo "$remotes" | grep -q "^${ONEDRIVE_REMOTE}:$"; then
                     log ERROR "OneDrive remote '$ONEDRIVE_REMOTE' not found. Run: rclone config"
                     return 1
@@ -651,7 +665,10 @@ upload_git() {
 
         # Check for changes — capture to variable instead of piping to grep
         local status_output
-        status_output=$(git status --porcelain 2>/dev/null || true)
+        if ! status_output=$(git status --porcelain); then
+            log ERROR "git status failed in: $backup_path"
+            return 1
+        fi
 
         if [[ -n "$status_output" ]]; then
             log INFO "Changes detected. Committing..."
@@ -704,10 +721,12 @@ upload_onedrive() {
 
     local target_path="${ONEDRIVE_REMOTE}:${ONEDRIVE_PATH}/${TODAY}"
 
-    if ! rclone copy "$backup_path" "$target_path" --include "*.gz" 2>/dev/null; then
-        log ERROR "OneDrive upload failed"
+    local rclone_out
+    if ! rclone_out=$(rclone copy "$backup_path" "$target_path" --include "*.gz" 2>&1); then
+        log ERROR "OneDrive upload failed: $rclone_out"
         return 1
     fi
+    log DEBUG "rclone output: $rclone_out"
 
     log SUCCESS "OneDrive upload completed."
     cleanup_local_backups
@@ -744,20 +763,35 @@ backup_database() {
 
     log INFO "Backing up $type database: $db from $host:$port"
 
+    # Dump stderr goes to a temp file so messages can be tagged with the db name
+    # (jobs run in parallel); debug mode adds --verbose to show per-table progress
+    local err_file
+    err_file=$(mktemp /tmp/backupdb_err.XXXXXX)
+    local verbose=()
+    [[ "$DEBUG_MODE" == "true" ]] && verbose=(--verbose)
+
     # Create backup using credentials file (password not in process list)
     local dump_ok=true
     if [[ "$type" == "postgres" ]]; then
-        PGPASSFILE="$cred_file" pg_dump -w --clean --if-exists \
-            -h "$host" -p "$port" -U "$user" -d "$db" > "$backup_file" 2>/dev/null || dump_ok=false
+        PGPASSFILE="$cred_file" pg_dump -w --clean --if-exists "${verbose[@]}" \
+            -h "$host" -p "$port" -U "$user" -d "$db" > "$backup_file" 2> "$err_file" || dump_ok=false
     else
-        mysqldump --defaults-extra-file="$cred_file" --add-drop-table --allow-keywords --skip-dump-date -c \
-            -h "$host" -P "$port" -u "$user" "$db" > "$backup_file" 2>/dev/null || dump_ok=false
+        mysqldump --defaults-extra-file="$cred_file" --add-drop-table --allow-keywords --skip-dump-date -c "${verbose[@]}" \
+            -h "$host" -P "$port" -u "$user" "$db" > "$backup_file" 2> "$err_file" || dump_ok=false
     fi
+
+    local line
     if [[ "$dump_ok" != "true" ]]; then
         log ERROR "$type dump failed for database: $db"
-        rm -f "$backup_file"
+        while IFS= read -r line; do log ERROR "  [$db] $line"; done < "$err_file"
+        rm -f "$backup_file" "$err_file"
         return 1
     fi
+    # Successful dumps can still emit warnings — always show them
+    while IFS= read -r line; do
+        if [[ "$DEBUG_MODE" == "true" ]]; then log DEBUG "  [$db] $line"; else log WARN "  [$db] $line"; fi
+    done < "$err_file"
+    rm -f "$err_file"
 
     if [[ ! -s "$backup_file" ]]; then
         log WARN "Backup file is empty, skipping: $db"
@@ -805,7 +839,7 @@ run_backups() {
 
     # Clean up old Git backups based on retention policy
     if [[ "$STORAGE_TYPE" == "git" && "$GIT_RETENTION_DAYS" -ge 0 ]]; then
-        find "$backup_path" -name "*.sql.gz" -mtime "+$GIT_RETENTION_DAYS" -type f -delete 2>/dev/null || true
+        find "$backup_path" -name "*.sql.gz" -mtime "+$GIT_RETENTION_DAYS" -type f -delete || log WARN "Some old Git backups could not be deleted"
         log INFO "Cleaned up old Git backups (older than $GIT_RETENTION_DAYS days)"
     fi
 
@@ -825,15 +859,20 @@ run_backups() {
         create_cred_file "$type" "$password"
 
         # Test connection using credentials file
-        if ! db_query "$type" "$host" "$port" "$user" "SELECT 1;" >/dev/null 2>&1; then
-            log ERROR "Cannot connect to $type database: $host:$port with user '$user'"
+        local conn_out
+        if ! conn_out=$(db_query "$type" "$host" "$port" "$user" "SELECT 1;" 2>&1); then
+            log ERROR "Cannot connect to $type database: $host:$port with user '$user': $conn_out"
             overall_failed=true
             continue
         fi
 
-        # Get database list (exclude system databases)
+        # Get database list (exclude system databases) — client errors print to stderr
         local databases
-        databases=$(db_list "$type" "$host" "$port" "$user" 2>/dev/null)
+        if ! databases=$(db_list "$type" "$host" "$port" "$user"); then
+            log ERROR "Failed to list databases on $host:$port"
+            overall_failed=true
+            continue
+        fi
 
         if [[ -z "$databases" ]]; then
             log WARN "No user databases found on $host:$port"
@@ -859,7 +898,7 @@ run_backups() {
             # Throttle: wait for some jobs to finish if we hit the max
             if [[ $job_count -ge $MAX_PARALLEL_JOBS ]]; then
                 # Wait for the oldest job
-                wait "${pids[0]}" 2>/dev/null
+                wait "${pids[0]}"
                 local result=$?
                 if [[ $result -ne 0 && $result -ne 2 ]]; then
                     log ERROR "Failed to backup database: ${db_names[0]} (exit code: $result)"
@@ -873,7 +912,7 @@ run_backups() {
 
         # Wait for remaining background jobs
         for idx in "${!pids[@]}"; do
-            wait "${pids[$idx]}" 2>/dev/null
+            wait "${pids[$idx]}"
             local result=$?
             if [[ $result -ne 0 && $result -ne 2 ]]; then
                 log ERROR "Failed to backup database: ${db_names[$idx]} (exit code: $result)"

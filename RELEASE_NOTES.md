@@ -4,6 +4,20 @@ A comprehensive database backup script with multi-storage backend support, autom
 
 ---
 
+## Version 7.3 (September 28, 2026) - No More Silent Failures
+
+### Fixes
+- **Dump errors are no longer discarded** — `pg_dump`/`mysqldump` stderr was sent to `/dev/null`, so a failing database only showed "dump failed". Errors are now logged per database as `[dbname] <message>`, and warnings from successful dumps are shown too
+- **Connection errors show the real reason** — the `SELECT 1` check now includes the client's error text (auth failure, timeout, pg_hba rejection)
+- **Database listing failures are errors** — a failed `psql`/`mysql` listing used to look like "No user databases found"; it now fails the host with the client's error
+- **No `/dev/null` redirects left** — git, rclone, find, curl and lock checks all surface their errors; the update check reports failures in debug mode
+
+### Improvements
+- **`--debug` runs dumps with `--verbose`** — per-table progress for each database, tagged with the database name
+- Interrupted runs clean up their temp stderr files
+
+---
+
 ## Version 7.2 (September 19, 2026) - PostgreSQL Support
 
 ### New Features
